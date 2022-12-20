@@ -5,13 +5,14 @@ import boto3
 from decimal import Decimal 
 from datetime import datetime
 import time
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 TABLE_SESSION = 'session'
-TABLE_TRANSACTION = 'transaction'
+TABLE_TRANSACTION = 'transaction2'
 TABLE_USER = 'user'
 # TABLE_SESSION = 'OneWallet-session'
-# TABLE_TRANSACTION = 'OneWallet-transaction'
+# TABLE_TRANSACTION = 'OneWallet-transaction2'
 # TABLE_USER = 'OneWallet-user'
 
 def verify_session(sessionID, dynamodb=None):
@@ -34,9 +35,9 @@ def put_transaction(transactionID, transactionAmount, transactionType, transacti
     timestamp = datetime.fromtimestamp(now).strftime('%Y-%m-%d %H:%M:%S')
     response = table.put_item(
        Item={
-            'transaction.id': transactionID,
+            'transactionId': transactionID,
             'amount': transactionAmount,
-            'type': transactionType,
+            'transactionType': transactionType,
             'isdelete': transactionIsDelete,
             'userId': transactionUserId,
             'refId': transactionRefId,
@@ -72,32 +73,59 @@ def get_balance(userId, dynamodb=None):
     else:
         return response['Item']['balance']
 
-def cancel_transaction(transactionID, transactionRefID, dynamodb=None):
+def cancel_transaction(userID, transactionRefID, dynamodb=None):
     if not dynamodb:
         dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(TABLE_TRANSACTION)
     now = time.time()
     timestamp = datetime.fromtimestamp(now).strftime('%Y-%m-%d %H:%M:%S')
-    response = table.update_item(
-        Key={
-            'transaction.id': 'D' + transactionRefID
-        },
-        UpdateExpression="set isdelete=:val, updateTime=:time",
-        ExpressionAttributeValues={
-            ':val': 1,
-            ':time': timestamp
-        },
-        ReturnValues="UPDATED_NEW"
-    )
-    #return response
+    
+    Tid = None
+    isDelete = False
+    try:
+        response = table.scan(
+            FilterExpression='refId=:refId and userId=:userId and transactionType=:type',
+            ExpressionAttributeValues={
+                ':refId': transactionRefID,
+                ':userId': userID,
+                ':type': 'debit'
+            },
+            ProjectionExpression='transactionId, isdelete'
+        )
+        Tid = response['Items'][0].get('transactionId', '')
+        isDelete = response['Items'][0].get('isdelete', False)
+    except ClientError as e:
+        print(e)
+        return 1
+    except:
+        return 1
+    if not Tid:
+        return 1
+    elif isDelete == Decimal('1'):
+        return 2
+    
+    try: 
+        response = table.update_item(
+            Key={'transactionId': Tid},
+            UpdateExpression="set isdelete=:val, updateTime=:time",
+            ExpressionAttributeValues={
+                ':val': Decimal('1'),
+                ':time': timestamp
+            },
+            ReturnValues="UPDATED_NEW"
+        )
+    except:
+        return 1
+
+    return 0
 
 def get_isdelete(transactionID, dynamodb=None):
     if not dynamodb:
         dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(TABLE_TRANSACTION)
     try:
-        response = table.get_item(Key={'transaction.id': transactionID})
-        res = response['Item']['transaction.id']
+        response = table.get_item(Key={'transactionId': transactionID})
+        res = response['Item']['transactionId']
     except:
         return 2 # no such debit transaction
     else:
@@ -197,36 +225,31 @@ def lambda_handler(event, context):
             }
         return context
     
+    status = 'OK',
     ret = get_isdelete(bodyKeyTid)
     if ret == Decimal('1'): # no settlement transaction
-        context = {
-                "statusCode": 200,
-                "headers": {
-                    "my_header": "my_value"
-                },
-                "body": json.dumps({'status': 'BET_ALREADY_SETTLED'}),
-                "isBase64Encoded": False
-            }
-        return context
-    elif ret == Decimal('2'):
-        context = {
-                "statusCode": 200,
-                "headers": {
-                    "my_header": "my_value"
-                },
-                "body": json.dumps({'status': 'BET_DOES_NOT_EXIST'}),
-                "isBase64Encoded": False
-            }
-        return context
-
-    # cancel_transaction(bodyKeyTid, bodyKeyTrefId)
-
-    put_transaction(bodyKeyTid, Decimal(str(bodyKeyTamount)), "credit" , Decimal('1'), bodyKeyId, bodyKeyTrefId)
-    
-    add_balance(bodyKeyId, Decimal(str(bodyKeyTamount)))
+        status = 'BET_ALREADY_SETTLED'
+    else:
+        ret = cancel_transaction(bodyKeyId, bodyKeyTrefId)
+        if ret == 1:    # find no refId transaction
+            context = {
+                    "statusCode": 200,
+                    "headers": {
+                        "my_header": "my_value"
+                    },
+                    "body": json.dumps({'status': 'INVALID_PARAMETER'}),
+                    "isBase64Encoded": False
+                }
+            return context
+        elif ret == 2:    # no settlement transaction
+            status = 'BET_ALREADY_SETTLED'
+        else:
+            put_transaction(bodyKeyTid, Decimal(str(bodyKeyTamount)), "credit" , Decimal('1'), bodyKeyId, bodyKeyTrefId)
+            
+            add_balance(bodyKeyId, Decimal(str(bodyKeyTamount)))
     
     responseBody = {
-        'status': 'OK',
+        'status': status,
         'balance': float(get_balance(bodyKeyId)),
         'uuid': bodyKeyUuid
     }

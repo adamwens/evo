@@ -7,10 +7,10 @@ import time
 import boto3
 
 TABLE_SESSION = 'session'
-TABLE_TRANSACTION = 'transaction'
+TABLE_TRANSACTION = 'transaction2'
 TABLE_USER = 'user'
 # TABLE_SESSION = 'OneWallet-session'
-# TABLE_TRANSACTION = 'OneWallet-transaction'
+# TABLE_TRANSACTION = 'OneWallet-transaction2'
 # TABLE_USER = 'OneWallet-user'
 
 def put_session(sessionID, sessionUserId, dynamodb=None):

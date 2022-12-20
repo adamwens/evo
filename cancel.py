@@ -8,10 +8,10 @@ import time
 from botocore.exceptions import ClientError
 
 TABLE_SESSION = 'session'
-TABLE_TRANSACTION = 'transaction'
+TABLE_TRANSACTION = 'transaction2'
 TABLE_USER = 'user'
 # TABLE_SESSION = 'OneWallet-session'
-# TABLE_TRANSACTION = 'OneWallet-transaction'
+# TABLE_TRANSACTION = 'OneWallet-transaction2'
 # TABLE_USER = 'OneWallet-user'
 
 def verify_session(sessionID, dynamodb=None):
@@ -31,8 +31,8 @@ def verify_transaction(transactionID, dynamodb=None):
         dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(TABLE_TRANSACTION)
     try:
-        response = table.get_item(Key={'transaction.id': transactionID})
-        res = response['Item']['transaction.id']
+        response = table.get_item(Key={'transactionId': transactionID})
+        res = response['Item']['transactionId']
     except:
         return 0
     else:
@@ -46,9 +46,9 @@ def put_transaction(transactionID, transactionAmount, transactionType, transacti
     timestamp = datetime.fromtimestamp(now).strftime('%Y-%m-%d %H:%M:%S')
     response = table.put_item(
        Item={
-            'transaction.id': transactionID,
+            'transactionId': transactionID,
             'amount': transactionAmount,
-            'type': transactionType,
+            'transactionType': transactionType,
             'isdelete': transactionIsDelete,
             'userId': transactionUserId,
             'refId': transactionRefId,
@@ -92,7 +92,7 @@ def cancel_transaction(transactionID, dynamodb=None):
     timestamp = datetime.fromtimestamp(now).strftime('%Y-%m-%d %H:%M:%S')
     response = table.update_item(
         Key={
-            'transaction.id': transactionID
+            'transactionId': transactionID
         },
         UpdateExpression="set isdelete=:val, updateTime=:time",
         ExpressionAttributeValues={
@@ -108,8 +108,8 @@ def get_isdelete(transactionID, dynamodb=None):
         dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(TABLE_TRANSACTION)
     try:
-        response = table.get_item(Key={'transaction.id': transactionID})
-        res = response['Item']['transaction.id']
+        response = table.get_item(Key={'transactionId': transactionID})
+        res = response['Item']['transactionId']
     except:
         return 2 # no such debit transaction
     else:

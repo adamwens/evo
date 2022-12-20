@@ -8,10 +8,10 @@ import time
 from botocore.exceptions import ClientError
 
 TABLE_SESSION = 'session'
-TABLE_TRANSACTION = 'transaction'
+TABLE_TRANSACTION = 'transaction2'
 TABLE_USER = 'user'
 # TABLE_SESSION = 'OneWallet-session'
-# TABLE_TRANSACTION = 'OneWallet-transaction'
+# TABLE_TRANSACTION = 'OneWallet-transaction2'
 # TABLE_USER = 'OneWallet-user'
 
 def verify_session(sessionID, dynamodb=None):
@@ -31,8 +31,8 @@ def verify_transaction(transactionID, dynamodb=None):
         dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(TABLE_TRANSACTION)
     try:
-        response = table.get_item(Key={'transaction.id': transactionID})
-        res = response['Item']['transaction.id']
+        response = table.get_item(Key={'transactionId': transactionID})
+        res = response['Item']['transactionId']
     except:
         return 0
     else:
@@ -46,9 +46,9 @@ def put_transaction(transactionID, transactionAmount, transactionType, transacti
     timestamp = datetime.fromtimestamp(now).strftime('%Y-%m-%d %H:%M:%S')
     response = table.put_item(
        Item={
-            'transaction.id': transactionID,
+            'transactionId': transactionID,
             'amount': transactionAmount,
-            'type': transactionType,
+            'transactionType': transactionType,
             'isdelete': transactionIsDelete,
             'userId': transactionUserId,
             'refId': transactionRefId,
@@ -197,7 +197,7 @@ def lambda_handler(event, context):
             }
         return context
 
-    put_transaction(bodyKeyTid, Decimal(str(bodyKeyTamount)), "debit" , 0, bodyKeyId, bodyKeyTrefId)
+    put_transaction(bodyKeyTid, Decimal(str(bodyKeyTamount)), "debit" , Decimal('0'), bodyKeyId, bodyKeyTrefId)
     
     add_balance(bodyKeyId, Decimal(str(bodyKeyTamount)) * Decimal('-1'))
 

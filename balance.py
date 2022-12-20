@@ -5,10 +5,10 @@ import boto3
 from botocore.exceptions import ClientError
 
 TABLE_SESSION = 'session'
-TABLE_TRANSACTION = 'transaction'
+TABLE_TRANSACTION = 'transaction2'
 TABLE_USER = 'user'
 # TABLE_SESSION = 'OneWallet-session'
-# TABLE_TRANSACTION = 'OneWallet-transaction'
+# TABLE_TRANSACTION = 'OneWallet-transaction2'
 # TABLE_USER = 'OneWallet-user'
 
 def verify_session(sessionID, dynamodb=None):
