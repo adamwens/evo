@@ -1,3 +1,5 @@
+# debit
+
 from __future__ import print_function
 import re
 import json
@@ -8,7 +10,7 @@ import time
 from botocore.exceptions import ClientError
 
 TABLE_SESSION = 'session'
-TABLE_TRANSACTION = 'transaction2'
+TABLE_TRANSACTION = 'transaction'
 TABLE_USER = 'user'
 # TABLE_SESSION = 'OneWallet-session'
 # TABLE_TRANSACTION = 'OneWallet-transaction2'
@@ -26,17 +28,44 @@ def verify_session(sessionID, dynamodb=None):
     else:
         return 1
 
-def verify_transaction(transactionID, dynamodb=None):
+def find_transaction(transactionRefID, userID, dynamodb=None):
     if not dynamodb:
         dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(TABLE_TRANSACTION)
+    
+    transactions = []
     try:
-        response = table.get_item(Key={'transactionId': transactionID})
-        res = response['Item']['transactionId']
+        response = table.scan(
+            FilterExpression='refId=:refId and userId=:userId',
+            ExpressionAttributeValues={
+                ':refId': transactionRefID,
+                ':userId': userID
+            },
+            ProjectionExpression='transactionId, isdelete, transactionType'
+        )
+        transactions = response['Items']
+    except ClientError as e:
+        print(e)
     except:
-        return 0
-    else:
-        return 1
+        pass
+    
+    return transactions
+
+def updateCancelStatus(transactionId, dynamodb=None):
+    if not dynamodb:
+        dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table(TABLE_TRANSACTION)
+    response = table.update_item(
+        Key={
+            'transactionId': transactionId,
+        },
+        UpdateExpression="set isdelete=:val",
+        ExpressionAttributeValues={
+            ':val': Decimal('1')
+        },
+        ReturnValues="UPDATED_NEW"
+    )
+    #return response
 
 def put_transaction(transactionID, transactionAmount, transactionType, transactionIsDelete, transactionUserId, transactionRefId,dynamodb=None):
     if not dynamodb:
@@ -110,12 +139,10 @@ def lambda_handler(event, context):
 
     try:
         bodyParam = event['body']
-        bodyKeyGame = json.loads(bodyParam)['game']
         bodyKeyTransaction = json.loads(bodyParam)['transaction']
         bodyKeyTid = bodyKeyTransaction['id']
         bodyKeyTrefId = bodyKeyTransaction['refId']
         bodyKeyTamount = bodyKeyTransaction['amount']    
-        bodyKeyCcy = json.loads(bodyParam)['currency']
         bodyKeyUuid = json.loads(bodyParam)['uuid']
 
         try:
@@ -174,8 +201,9 @@ def lambda_handler(event, context):
                 "isBase64Encoded": False
             }
         return context
-
-    if float(get_balance(bodyKeyId)) - bodyKeyTamount <0:
+    
+    balance = get_balance(bodyKeyId)
+    if float(balance) - bodyKeyTamount <0:
         context = {
                 "statusCode": 200,
                 "headers": {
@@ -185,25 +213,25 @@ def lambda_handler(event, context):
                 "isBase64Encoded": False
             }
         return context
-
-    if verify_transaction(bodyKeyTid) == 1: # debit transaction exists
-        context = {
-                "statusCode": 200,
-                "headers": {
-                    "my_header": "my_value"
-                },
-                "body": json.dumps({'status': 'BET_ALREADY_EXIST'}),
-                "isBase64Encoded": False
-            }
-        return context
-
-    put_transaction(bodyKeyTid, Decimal(str(bodyKeyTamount)), "debit" , Decimal('0'), bodyKeyId, bodyKeyTrefId)
     
-    add_balance(bodyKeyId, Decimal(str(bodyKeyTamount)) * Decimal('-1'))
+    status = 'OK'
+    transactions = find_transaction(bodyKeyTrefId, bodyKeyId)
+    if transactions: # transaction exists
+        status = 'BET_ALREADY_EXIST'
+        try:
+            if transactions[0]['transactionType'] == 'cancel' and transactions[0]['isdelete'] == Decimal('0'):
+                status = 'FINAL_ERROR_ACTION_FAILED'
+                updateCancelStatus(transactions[0]['transactionId'])
+        except:
+            pass
+    else:
+        put_transaction(bodyKeyTid, Decimal(str(bodyKeyTamount)), "debit" , Decimal('0'), bodyKeyId, bodyKeyTrefId)
+        add_balance(bodyKeyId, Decimal(str(bodyKeyTamount)) * Decimal('-1'))
+        balance += Decimal(str(bodyKeyTamount)) * Decimal('-1')
 
     responseBody = {
-        'status': 'OK',
-        'balance': float(get_balance(bodyKeyId)),
+        'status': status,
+        'balance': float(balance),
         'uuid': bodyKeyUuid
     }
     

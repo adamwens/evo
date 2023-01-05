@@ -1,3 +1,5 @@
+# balance
+
 from __future__ import print_function
 import re
 import json
@@ -5,7 +7,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 TABLE_SESSION = 'session'
-TABLE_TRANSACTION = 'transaction2'
+TABLE_TRANSACTION = 'transaction'
 TABLE_USER = 'user'
 # TABLE_SESSION = 'OneWallet-session'
 # TABLE_TRANSACTION = 'OneWallet-transaction2'
